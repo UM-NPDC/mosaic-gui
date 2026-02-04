@@ -1,0 +1,89 @@
+# MOSAIC-GUI Configuration
+# ========================
+# Configuration file for the MOSAIC retrosynthesis planning GUI
+
+# Model paths - adjust these to match your MOSAIC installation
+model:
+  base_path: "./Model_Weights"
+  faiss_index: "./Model_Weights/faiss_index"
+  kernel_network: "./Model_Weights/kernel_metric_network.pt"
+  num_experts: 2498
+  device: "auto"  # auto, cuda, cpu
+
+# Prediction parameters
+prediction:
+  max_steps: 10
+  beam_width: 5
+  temperature: 0.7
+  top_p: 0.9
+  min_confidence: 0.5
+
+# Search and ranking options
+search:
+  use_kernel_metric: true
+  k_nearest_experts: 3
+  ensemble_predictions: true
+
+# Starting materials database
+stock:
+  use_default: true
+  custom_stock_file: null  # Path to custom starting materials CSV
+  check_commercial: true
+
+# Server configuration
+server:
+  host: "0.0.0.0"
+  port: 8501
+  debug: false
+  max_upload_size: 10  # MB
+
+# PubChem API settings
+pubchem:
+  enabled: true
+  timeout: 10  # seconds
+  cache_results: true
+  max_retries: 3
+
+# Citation management
+citations:
+  database_path: "./data/citations.json"
+  auto_fetch_doi: true
+  include_preprints: false
+
+# Caching
+cache:
+  enabled: true
+  directory: "./cache"
+  max_size_mb: 500
+  ttl_hours: 24
+
+# Logging configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  file: "./logs/mosaic-gui.log"
+  max_size_mb: 10
+  backup_count: 5
+  console_output: true
+
+# Export settings
+export:
+  default_format: "json"
+  include_images: true
+  image_format: "png"
+  image_size: [400, 300]
+  pdf_template: "./templates/report_template.html"
+
+# UI customization
+ui:
+  theme: "dark"
+  show_molecule_3d: false
+  max_display_steps: 20
+  show_confidence_bars: true
+  enable_structure_editor: false
+
+# Advanced options
+advanced:
+  use_gpu_fingerprints: false
+  parallel_experts: 4
+  memory_limit_gb: 16
+  enable_profiling: false

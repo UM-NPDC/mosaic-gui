@@ -1,0 +1,44 @@
+# MOSAIC-GUI Requirements
+# =======================
+
+# Core framework
+streamlit>=1.28.0
+
+# Chemistry/Cheminformatics
+rdkit>=2023.9.1
+
+# ML/Deep Learning (for MOSAIC integration)
+torch>=2.0.0
+transformers>=4.35.0
+peft>=0.6.0
+
+# Data handling
+pandas>=2.0.0
+numpy>=1.24.0
+
+# API and networking
+requests>=2.31.0
+
+# Visualization
+matplotlib>=3.7.0
+plotly>=5.18.0
+
+# Utilities
+tqdm>=4.66.0
+python-Levenshtein>=0.23.0
+
+# FAISS for similarity search (MOSAIC component)
+faiss-cpu>=1.7.4
+
+# Additional chemistry tools
+pubchempy>=1.0.4
+
+# PDF generation for reports
+reportlab>=4.0.0
+fpdf2>=2.7.0
+
+# JSON/YAML handling
+pyyaml>=6.0
+
+# Image processing
+Pillow>=10.0.0

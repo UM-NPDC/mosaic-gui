@@ -1,0 +1,268 @@
+# MOSAIC-GUI Kubernetes Deployment for GKE
+# Supports both CPU-only and GPU configurations
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mosaic
+  labels:
+    app: mosaic-gui
+
+---
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosaic-config
+  namespace: mosaic
+data:
+  MOSAIC_MODE: "demo"
+  STREAMLIT_SERVER_PORT: "8501"
+  STREAMLIT_SERVER_ADDRESS: "0.0.0.0"
+  STREAMLIT_SERVER_HEADLESS: "true"
+  STREAMLIT_BROWSER_GATHER_USAGE_STATS: "false"
+
+---
+# Deployment - CPU Version
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosaic-gui
+  namespace: mosaic
+  labels:
+    app: mosaic-gui
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mosaic-gui
+  template:
+    metadata:
+      labels:
+        app: mosaic-gui
+    spec:
+      containers:
+      - name: mosaic-gui
+        image: gcr.io/YOUR_PROJECT_ID/mosaic-gui:latest
+        ports:
+        - containerPort: 8501
+          name: http
+        envFrom:
+        - configMapRef:
+            name: mosaic-config
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /_stcore/health
+            port: 8501
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /_stcore/health
+            port: 8501
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - mosaic-gui
+              topologyKey: kubernetes.io/hostname
+
+---
+# Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosaic-gui-service
+  namespace: mosaic
+  labels:
+    app: mosaic-gui
+spec:
+  type: ClusterIP
+  ports:
+  - port: 80
+    targetPort: 8501
+    protocol: TCP
+    name: http
+  selector:
+    app: mosaic-gui
+
+---
+# Ingress with Google-managed SSL
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mosaic-gui-ingress
+  namespace: mosaic
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: mosaic-gui-ip
+    networking.gke.io/managed-certificates: mosaic-gui-cert
+    kubernetes.io/ingress.class: gce
+spec:
+  rules:
+  - host: mosaic.yourdomain.com
+    http:
+      paths:
+      - path: /*
+        pathType: ImplementationSpecific
+        backend:
+          service:
+            name: mosaic-gui-service
+            port:
+              number: 80
+
+---
+# Managed Certificate
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: mosaic-gui-cert
+  namespace: mosaic
+spec:
+  domains:
+  - mosaic.yourdomain.com
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: mosaic-gui-hpa
+  namespace: mosaic
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: mosaic-gui
+  minReplicas: 2
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+
+---
+# PodDisruptionBudget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: mosaic-gui-pdb
+  namespace: mosaic
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: mosaic-gui
+
+---
+# GPU Deployment (Optional - apply separately)
+# kubectl apply -f kubernetes-deployment-gpu.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mosaic-gui-gpu
+  namespace: mosaic
+  labels:
+    app: mosaic-gui-gpu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mosaic-gui-gpu
+  template:
+    metadata:
+      labels:
+        app: mosaic-gui-gpu
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-accelerator: nvidia-tesla-t4
+      containers:
+      - name: mosaic-gui
+        image: gcr.io/YOUR_PROJECT_ID/mosaic-gui:gpu
+        ports:
+        - containerPort: 8501
+        env:
+        - name: MOSAIC_MODE
+          value: "full"
+        - name: NVIDIA_VISIBLE_DEVICES
+          value: "all"
+        resources:
+          requests:
+            cpu: "2000m"
+            memory: "8Gi"
+            nvidia.com/gpu: "1"
+          limits:
+            cpu: "4000m"
+            memory: "16Gi"
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: models
+          mountPath: /app/models
+          readOnly: true
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: mosaic-models-pvc
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+
+---
+# PersistentVolumeClaim for Models (GPU version)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mosaic-models-pvc
+  namespace: mosaic
+spec:
+  accessModes:
+  - ReadOnlyMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: standard-rwo
